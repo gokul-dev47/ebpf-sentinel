@@ -1,0 +1,94 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_production}
+      POSTGRES_DB: sentinel
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sentinel-net
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sentinel-net
+
+  sentinel:
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile
+      args:
+        VERSION: ${SENTINEL_VERSION:-dev}
+    restart: unless-stopped
+    privileged: true
+    pid: host
+    network_mode: host
+    volumes:
+      - /sys/kernel/btf:/sys/kernel/btf:ro
+      - /proc:/proc:ro
+      - /sys/fs/bpf:/sys/fs/bpf
+      - /sys/module:/sys/module:ro
+      - sentinel_data:/var/lib/sentinel
+    environment:
+      SENTINEL_DB_DSN: postgres://sentinel:${POSTGRES_PASSWORD:-changeme_in_production}@localhost:5432/sentinel?sslmode=disable
+      SENTINEL_REDIS_DSN: redis://localhost:6379/0
+      SENTINEL_WEBHOOK_URL: ${SENTINEL_WEBHOOK_URL:-}
+    command:
+      - --scan-interval=5m
+      - --api-addr=:8080
+      - --metrics-addr=:9090
+      - --log-level=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
+      - NET_ADMIN
+      - BPF
+      - PERFMON
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - sentinel-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  sentinel_data:
+  grafana_data:
+
+networks:
+  sentinel-net:
+    driver: bridge

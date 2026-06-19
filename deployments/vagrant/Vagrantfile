@@ -1,0 +1,38 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+SENTINEL_VERSION = ENV.fetch("SENTINEL_VERSION", "dev")
+
+VMs = [
+  { name: "ubuntu2204-k515", box: "ubuntu/jammy64",    cpus: 2, memory: 2048 },
+  { name: "ubuntu2404-k68",  box: "ubuntu/noble64",    cpus: 2, memory: 2048 },
+  { name: "debian12-k61",    box: "debian/bookworm64", cpus: 2, memory: 2048 },
+].freeze
+
+Vagrant.configure("2") do |config|
+  config.vm.provider "virtualbox" do |vb|
+    vb.check_guest_additions = false
+  end
+
+  VMs.each do |vm_cfg|
+    config.vm.define vm_cfg[:name] do |vm|
+      vm.vm.box      = vm_cfg[:box]
+      vm.vm.hostname = vm_cfg[:name]
+
+      vm.vm.provider "virtualbox" do |vb|
+        vb.cpus   = vm_cfg[:cpus]
+        vb.memory = vm_cfg[:memory]
+        vb.name   = "sentinel-#{vm_cfg[:name]}"
+      end
+
+      vm.vm.synced_folder "../../", "/vagrant/ebpf-sentinel",
+        type: "rsync",
+        rsync__exclude: [".git/", "bin/", "build/", "vendor/"]
+
+      vm.vm.provision "shell",
+        path:       "provision.sh",
+        env:        { "SENTINEL_VERSION" => SENTINEL_VERSION },
+        privileged: true
+    end
+  end
+end
