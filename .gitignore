@@ -1,0 +1,35 @@
+# Binaries
+bin/
+*.exe
+
+# Build artifacts
+build/
+*.bpf.o
+*.o
+
+# Go
+vendor/
+*.test
+coverage/
+*.out
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vagrant
+.vagrant/
+
+# Benchmark results
+benchmark_results/
+
+# Logs
+*.log
